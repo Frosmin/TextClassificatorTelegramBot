@@ -2,10 +2,9 @@ import logging
 import os
 from dotenv import load_dotenv
 import pytz
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue
-from telegram.constants import ParseMode # No need for others like ForceReply in this example
-# ... your handler functions will be here (e.g., async def start(update: Update, context: CallbackContext): ...)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, JobQueue, CallbackQueryHandler
+from telegram.constants import ParseMode 
 from trainData import datos_entrenamiento
 from DataProcess import procesar_texto_desde_cero
 from LazyBayes import NaiveBayesNativo
@@ -14,23 +13,56 @@ import json
 modelo = NaiveBayesNativo()
 load_dotenv()
 
+async def button_handler(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    
+
+    await query.answer()
+    
+    if query.data == 'pago_qr':
+        await query.edit_message_text(
+            text="**Opción: Pago por QR**\n\n"
+                 "Escanea el código QR adjunto (imaginario por ahora) o usa este ID: `12345678`\n\n"
+                 "*Importante:* Envía una captura del comprobante aquí cuando termines.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif query.data == 'pago_banco':
+        await query.edit_message_text(
+            text="**Opción: Transferencia Bancaria**\n\n"
+                 "🏦 **Banco:** Banco Nacional\n"
+                 "👤 **Titular:** Simon.\n"
+                 "🔢 **Cuenta:** 123412312\n"
+                 "🆔 **NIT/CI:** 555666777\n\n"
+                 "⚠️ *Importante:* Envía una captura del comprobante aquí cuando termines.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+    elif query.data == 'cancelar':
+        await query.edit_message_text(text="Entendido, hemos cancelado el proceso de compra. Avísanos si necesitas algo más.")
+
+
 
 
 async def accion_compra(update: Update, context: CallbackContext):
-    """Acción cuando el usuario quiere comprar."""
+    keyboard = [
+        [
+            InlineKeyboardButton("📲 Pagar por QR", callback_data='pago_qr'),
+            InlineKeyboardButton("🏦 Transferencia", callback_data='pago_banco'),
+        ],
+        [InlineKeyboardButton("❌ Cancelar", callback_data='cancelar')]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     texto = (
-        "🛒 **¡Excelente decisión!**\n"
-        "Para procesar tu compra, puedes:\n"
-        "1. Pagar por QR.\n"
-        "2. Transferencia Bancaria.\n"
-        "¿Cuál prefieres?"
+        "**¡Excelente decisión!**\n\n"
+        "Para finalizar tu pedido, por favor selecciona tu método de pago preferido:"
     )
-    await update.message.reply_text(texto, parse_mode=ParseMode.MARKDOWN)
+    
+    await update.message.reply_text(texto, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 async def accion_catalogo(update: Update, context: CallbackContext):
-    """Acción para enviar el catálogo (PDF Real)."""
-    
-    # 1. Mensaje de confirmación inicial
     await update.message.reply_text("Claro, estoy subiendo el catálogo para ti. Un momento por favor...")
     
     nombre_archivo = 'herramientas_proyecto_IA2.pdf'
@@ -41,7 +73,7 @@ async def accion_catalogo(update: Update, context: CallbackContext):
             await update.message.reply_document(
                 document=documento,
                 caption="Aquí tienes nuestra lista de precios y productos actualizada",
-                filename="Catalogo_Oficial_2024.pdf" 
+                filename="Catalogo.pdf" 
             )
             
     except FileNotFoundError:
@@ -52,21 +84,20 @@ async def accion_catalogo(update: Update, context: CallbackContext):
         await update.message.reply_text("Ocurrió un error al intentar enviarte el archivo.")
 
 async def accion_soporte(update: Update, context: CallbackContext):
-    """Acción para soporte técnico."""
     texto = (
-        "🛠 **Soporte Técnico**\n"
+        "**Soporte Técnico**\n"
         "Lamento que tengas problemas. Un técnico revisará tu caso.\n"
         "Por favor, envíame una foto del error si es posible."
     )
     await update.message.reply_text(texto, parse_mode=ParseMode.MARKDOWN)
 
+
 async def accion_ubicacion(update: Update, context: CallbackContext):
-    """Acción para consultas de ubicación (envía mapa)."""
     await update.message.reply_text("Nos encontramos aquí:")
-    await update.message.reply_location(latitude=-17.3938, longitude=-66.1571)
+    await update.message.reply_location(latitude=-17.3933818, longitude=-66.1460324)
+
 
 async def accion_generica(update: Update, context: CallbackContext, categoria: str):
-    """Respuesta por defecto si no hay función específica."""
     await update.message.reply_text(f"Entendido, tu mensaje es de tipo: *{categoria.upper()}*. En breve te atendemos.", parse_mode=ParseMode.MARKDOWN)
 
 
@@ -79,13 +110,10 @@ ACCIONES = {
 }
 
 async def start(update: Update, context: CallbackContext) -> None:
-    """Sends a welcome message when the command /start is issued."""
     await update.message.reply_text('Hola, Bienvenid@, yo soy BayesBot! Dame tu consulta y te asignaré al personal adecuado para que te ayude.')
 
-# 
-# Note: Renamed from 'help' to 'help_command' to avoid conflicts with built-in 'help()'
+
 async def help_command(update: Update, context: CallbackContext) -> None:
-    """Sends a help message with usage instructions."""
     help_text = (
         "🤖 **BayesBot Commands**\n\n"
         "/start - Start the bot and get a welcome message.\n"
@@ -177,6 +205,17 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
+# 2. Add Handlers to the Application (as before)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    
+    # AGREGAR ESTA LÍNEA: Manejador para los botones
+    application.add_handler(CallbackQueryHandler(button_handler))
+
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+
+
     # 3. Start the Bot (Polling)
     print("El bot esta listo....")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

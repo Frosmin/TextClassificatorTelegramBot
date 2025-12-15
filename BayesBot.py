@@ -9,6 +9,7 @@ from telegram.constants import ParseMode # No need for others like ForceReply in
 from trainData import datos_entrenamiento
 from DataProcess import procesar_texto_desde_cero
 from LazyBayes import NaiveBayesNativo
+import json
 
 modelo = NaiveBayesNativo()
 load_dotenv()
@@ -143,7 +144,21 @@ def main() -> None:
     # Entrenamos
     modelo.fit(mensajes_train, categorias_train)
     
+    print("💾 Exportando modelo para n8n...")
     
+    datos_para_n8n = {
+        "vocabulario": list(modelo.vocabulario),
+        "priors": modelo.log_priors,          # Probabilidad base de cada categoría
+        "likelihoods": modelo.log_likelihoods # Probabilidad de cada palabra por categoría
+    }
+
+    nombre_json = 'modelo_entrenado.json'
+    
+    with open(nombre_json, 'w', encoding='utf-8') as f:
+        json.dump(datos_para_n8n, f, indent=4, ensure_ascii=False)
+        
+    print(f"✅ ¡Listo! El archivo '{nombre_json}' ha sido creado.")
+    print("Copia el contenido de ese archivo y úsalo en tu flujo de n8n.")
     
     timezone = pytz.timezone('America/La_Paz')
 
